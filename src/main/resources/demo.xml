@@ -1,0 +1,9 @@
+<screen width="256" height="128">
+  <!-- Offsets are relative to the parent. For spans, left positions the text center. -->
+  <div style="left: 24; top: 32">
+    <icon src="simpledisplays:signal/pending"
+          style="left: 0; top: 0; width: 24; height: 24" />
+    <span bind="status" font="minecraft:default"
+          style="left: 104; top: 0; font-size: 24; color: #55ff55">Waiting...</span>
+  </div>
+</screen>

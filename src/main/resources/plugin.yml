@@ -1,0 +1,15 @@
+name: SimpleDisplays
+version: '${version}'
+main: simpledisplays.SimpleDisplaysPlugin
+api-version: '1.21.11'
+folia-supported: true
+libraries:
+  - org.jetbrains.kotlin:kotlin-stdlib:2.3.0
+commands:
+  simpledisplays:
+    description: Place or remove your demo display
+    usage: /simpledisplays <place [scale]|remove>
+    permission: simpledisplays.demo
+permissions:
+  simpledisplays.demo:
+    default: op

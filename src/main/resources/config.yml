@@ -1,0 +1,11 @@
+demo-icon:
+  font: minecraft:default
+  id: simpledisplays:signal/pending
+  frames:
+    - {glyph: '|', ticks: 4}
+    - {glyph: '/', ticks: 4}
+    - {glyph: '—', ticks: 8}
+    - {glyph: '\', ticks: 4}
+
+demo-values:
+  status: "Waiting..."
