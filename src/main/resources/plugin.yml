@@ -5,6 +5,9 @@ api-version: '1.21.11'
 folia-supported: true
 libraries:
   - org.jetbrains.kotlin:kotlin-stdlib:2.3.0
+  - org.graalvm.polyglot:polyglot:24.2.2
+  - org.graalvm.js:js-language:24.2.2
+  - org.graalvm.truffle:truffle-runtime:24.2.2
 commands:
   simpledisplays:
     description: Place or remove your demo display

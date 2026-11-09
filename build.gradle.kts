@@ -13,6 +13,11 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    implementation("org.graalvm.polyglot:polyglot:24.2.2")
+    runtimeOnly("org.graalvm.polyglot:js-community:24.2.2")
+    testImplementation(kotlin("test"))
+    testImplementation("net.kyori:adventure-api:4.26.1")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 kotlin {
@@ -45,3 +50,5 @@ publishing {
         }
     }
 }
+
+tasks.test { useJUnitPlatform() }

@@ -25,11 +25,13 @@ class SimpleDisplaysPlugin : JavaPlugin() {
     }
 
     private val displays = ConcurrentHashMap<UUID, Placement>()
+    private var displayService: DisplayService? = null
     private lateinit var demo: DisplayTemplate
     private var demoValues = emptyMap<String, String>()
 
     override fun onEnable() {
         val service: DisplayService = XmlDisplayService()
+        displayService = service
         server.servicesManager.register(DisplayService::class.java, service, this, ServicePriority.Normal)
         saveDefaultConfig()
         try {
@@ -56,6 +58,10 @@ class SimpleDisplaysPlugin : JavaPlugin() {
     }
 
     override fun onDisable() {
+        try { displayService?.close() } catch (error: Exception) {
+            logger.log(java.util.logging.Level.SEVERE, "Failed to close display runtime", error)
+        }
+        displayService = null
         server.servicesManager.unregisterAll(this)
         val placements = displays.values.toList()
         displays.clear()
