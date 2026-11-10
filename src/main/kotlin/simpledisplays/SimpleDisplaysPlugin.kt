@@ -159,7 +159,14 @@ class SimpleDisplaysPlugin : JavaPlugin() {
             entity.backgroundColor = Color.fromARGB(0)
             entity.text(node.text)
             val transformation = entity.transformation
-            transformation.scale.set((node.size * unit * 40.0 / 9.0).toFloat())
+            val nativeScale = node.size * unit * 40.0 / 9.0
+            require(node.scaleX.isFinite() && node.scaleX > 0 && node.scaleY.isFinite() && node.scaleY > 0) {
+                "Invalid text transform"
+            }
+            val scaleX = (nativeScale * node.scaleX).toFloat()
+            val scaleY = (nativeScale * node.scaleY).toFloat()
+            require(scaleX.isFinite() && scaleX > 0 && scaleY.isFinite() && scaleY > 0) { "Invalid text transform" }
+            transformation.scale.set(scaleX, scaleY, nativeScale.toFloat())
             entity.transformation = transformation
         }
 

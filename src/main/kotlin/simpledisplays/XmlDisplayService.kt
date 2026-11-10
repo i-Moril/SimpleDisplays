@@ -6,6 +6,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextDecoration
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
 import simpledisplays.api.DisplayService
@@ -31,9 +32,11 @@ internal class XmlDisplayService : DisplayService {
         val y: Double,
         val size: Double,
         val animated: Boolean = false,
+        val scaleX: Double = 1.0,
+        val scaleY: Double = 1.0,
         val text: (Map<String, String>, Long) -> Component,
     ) {
-        fun draw(values: Map<String, String>, ticks: Long) = TextDraw(x, y, size, text(values, ticks), animated)
+        fun draw(values: Map<String, String>, ticks: Long) = TextDraw(x, y, size, text(values, ticks), animated, scaleX, scaleY)
     }
 
     override fun compile(xml: String, icons: Map<String, List<IconFrame>>): DisplayTemplate {
@@ -111,6 +114,7 @@ internal class XmlDisplayService : DisplayService {
                 "div" -> setOf("left", "top")
                 "span" -> setOf("left", "top", "font-size", "color")
                 "icon" -> setOf("left", "top", "width", "height")
+                "rect" -> setOf("left", "top", "width", "height", "color")
                 else -> error("Unsupported element <${element.tagName}>")
             }
             require(supported.containsAll(style.keys)) { "Unsupported style on <${element.tagName}>" }
@@ -131,6 +135,27 @@ internal class XmlDisplayService : DisplayService {
                         values[binding]?.takeIf { binding.isNotEmpty() }
                             ?.let { fallback.content(it) } ?: fallback
                     }
+                }
+                "rect" -> {
+                    val width = length(style["width"] ?: "16", positive = true)
+                    val height = length(style["height"] ?: "16", positive = true)
+                    val color = requireNotNull(TextColor.fromHexString(style["color"] ?: "#FFFFFF")) {
+                        "Invalid rectangle color"
+                    }
+                    // Vanilla bitmap U+2588 has 8x8 ink, advance 9, ascent 7.
+                    // TextDisplay's centered single-line ink occupies X [-3.5,4.5],
+                    // Y [1,9] pixels relative to its entity origin (1 pixel = .025 blocks).
+                    // Compensate the half-pixel horizontal bias; the existing renderer's
+                    // y = canvasTop - draw.y - draw.size cancels its 9-pixel top.
+                    val size = height * 9.0 / 8.0
+                    val scaleX = width / height
+                    val center = left + width * 7.0 / 16.0
+                    require(size.isFinite() && size > 0 && scaleX.isFinite() && scaleX > 0 && center.isFinite()) {
+                        "Invalid rectangle geometry"
+                    }
+                    val text = Component.text("\u2588").font(Key.key("minecraft:include/default")).color(color)
+                        .decorations(TextDecoration.entries.associateWith { TextDecoration.State.FALSE })
+                    output += Node(center, top, size, scaleX = scaleX) { _, _ -> text }
                 }
                 "icon" -> {
                     val source = element.getAttribute("src")

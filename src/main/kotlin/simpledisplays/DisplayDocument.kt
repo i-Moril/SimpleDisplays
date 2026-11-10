@@ -77,6 +77,7 @@ internal class DisplayDocument(val root: Element) {
         "div" -> setOf("id", "style")
         "span" -> setOf("id", "style", "font", "bind")
         "icon" -> setOf("id", "style", "src")
+        "rect" -> setOf("id", "style")
         else -> error("Unsupported visual element <${element.tagName}>")
     }
     private fun setAttribute(element: Element, key: String, value: String) {
@@ -106,7 +107,7 @@ internal class DisplayDocument(val root: Element) {
             "createElement" to callback { args ->
                 count(args, 1)
                 val tag = string(args, 0)
-                require(tag in setOf("div", "span", "icon")) { "Unsupported visual element $tag" }
+                require(tag in setOf("div", "span", "icon", "rect")) { "Unsupported visual element $tag" }
                 register(root.ownerDocument.createElement(tag))
             },
         )
@@ -177,7 +178,7 @@ internal class DisplayDocument(val root: Element) {
             for (i in 0 until element.childNodes.length) {
                 val child = element.childNodes.item(i)
                 if (child is Element) {
-                    require(element.tagName in setOf("screen", "div", "span")) { "Icons cannot contain visual children" }
+                    require(element.tagName in setOf("screen", "div", "span")) { "Only containers and spans can contain visual children" }
                     visit(child, depth + 1)
                 } else if (child.nodeType == org.w3c.dom.Node.TEXT_NODE || child.nodeType == org.w3c.dom.Node.CDATA_SECTION_NODE) {
                     require(element.tagName == "span" || child.nodeValue.isBlank()) { "Text belongs in a span" }

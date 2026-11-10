@@ -60,14 +60,18 @@ The host may supply `placeholderResolver = PlaceholderResolver { token -> ... }`
 ### Document interface
 
 - `document.getElementById(id)`: find an attached element; absent IDs return null.
-- `document.createElement(tag)`: create a detached `div`, `span` or `icon`.
+- `document.createElement(tag)`: create a detached `div`, `span`, `icon` or `rect`.
 - `document.documentElement`: the screen root.
 - Element `id`, `tagName`, `textContent`; `getAttribute(name)`, `setAttribute(name, value)`.
 - Element `appendChild(node)`, `remove()`, `replaceChildren(...nodes)`.
 
 The interface supports only the existing XML vocabulary. Scripts cannot create scripts, alter canvas dimensions, attach foreign nodes, form cycles, or leave duplicate IDs. `textContent` assigns literal text, never XML/HTML. There is no `innerHTML`, CSS selector engine, browser events, network API or timer API. Normal JS arrays and local computations remain available.
 
-Layout uses existing `style` declarations: `div` has `left`/`top`; `span` adds `font-size`/`color`; `icon` adds `width`/`height` instead. Spans may use `font` and `bind`; icons use `src` from the compile-time `Map<String, List<IconFrame>>`. A span's `left` is its horizontal center and `top` its top edge. Icon boxes use a top-left origin and fit a square glyph at their center. There are 128 logical units per block in the existing renderer contract. Canvas dimensions do not automatically clip content. Icon animation uses caller-supplied elapsed ticks; the library starts no rendering timer.
+Layout uses existing `style` declarations: `div` has `left`/`top`; `span` adds `font-size`/`color`; `icon` adds `width`/`height` instead. Spans may use `font` and `bind`; icons use `src` from the compile-time `Map<String, List<IconFrame>>`. A span's `left` is its horizontal center and `top` its top edge. Icon boxes use a top-left origin and fit a square glyph at their center. `rect` uses `left`, `top`, `width`, `height`, `color` (white by default); its origin is its actual ink's top-left and its width/height are positive logical lengths. Each rectangle emits one vanilla U+2588 glyph using explicit `minecraft:include/default`, independently stretched to the requested dimensions. It needs no custom rectangle font or texture. Vanilla 26.1.2 and 26.2 provide an opaque 8×8 bitmap with advance 9 and ascent 7; using the include directly avoids the default font's Force Unicode filtering. Resource packs that override this vanilla include/glyph can change that geometry.
+
+`TextDraw.scaleX` and `scaleY` default to 1. Hosts must apply both to the native text transform: `base = size * logicalUnitInBlocks * 40 / 9`, then scale `(base * scaleX, base * scaleY, base)`. The entity origin remains `(x, canvasTop - y - size)` for horizontal-center placement. A vanilla single-line block's native ink bounds are X `[-0.0875, 0.1125]`, Y `[0.025, 0.225]` blocks. Rectangle layout compensates those ink bearings: `size = height * 9 / 8`, `scaleX = width / height`, `scaleY = 1`, `x = left + width * 7 / 16`, `y = top`. Ordinary spans retain the prior text line-box contract; their top is not a promise that every font's first opaque pixel is at that position. Disable text shadows and background when rendering solid rectangles.
+
+There are 128 logical units per block in the existing renderer contract. Canvas dimensions do not automatically clip content. Icon animation uses caller-supplied elapsed ticks; the library starts no rendering timer.
 
 ## Execution and lifecycle
 
