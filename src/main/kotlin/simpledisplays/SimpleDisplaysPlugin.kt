@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 class SimpleDisplaysPlugin : JavaPlugin() {
     private class Placement {
         val entities = ConcurrentHashMap.newKeySet<TextDisplay>()
+        val slots = ConcurrentHashMap<String, PreviewElement>()
     }
 
     private val displays = ConcurrentHashMap<UUID, Placement>()
@@ -121,27 +122,41 @@ class SimpleDisplaysPlugin : JavaPlugin() {
         val owner = player.uniqueId
         val placement = Placement()
         displays.put(owner, placement)?.let(::removePlacement)
-        for ((index, node) in demo.draw(demoValues, 0).withIndex()) {
-            val location = center.clone()
-                .add(right.clone().multiply((node.x - demo.width / 2) * unit))
-                .add(0.0, (demo.height / 2 - node.y - node.size) * unit, 0.0)
-            server.regionScheduler.execute(this, location) {
-                if (displays[owner] !== placement) return@execute
-                try {
-                    val entity = spawnNode(location, node, unit)
-                    placement.entities.add(entity)
-                    if (displays[owner] !== placement) {
-                        placement.entities.remove(entity)
-                        entity.remove()
-                    } else {
-                        trackEntity(placement, entity, index, node)
-                    }
-                } catch (error: RuntimeException) {
-                    logger.log(java.util.logging.Level.WARNING, "Could not place demo display", error)
-                    if (displays.remove(owner, placement)) removePlacement(placement)
-                }
+        var elapsed = 0L
+        server.regionScheduler.runAtFixedRate(this, center, { task ->
+            if (displays[owner] !== placement) {
+                task.cancel()
+                return@runAtFixedRate
             }
-        }
+            try {
+                val frame = demo.draw(demoValues, elapsed++)
+                val next = reconcilePreview(placement.slots, frame)
+                for (slot in next.added) {
+                    val spawned = slot.node
+                    val location = nodeLocation(center, right, spawned, unit, demo.width, demo.height)
+                    server.regionScheduler.execute(this, location) {
+                        if (displays[owner] !== placement || placement.slots[slot.node.key] !== slot) return@execute
+                        try {
+                            val entity = spawnNode(location, spawned, unit)
+                            placement.entities.add(entity)
+                            if (displays[owner] !== placement || placement.slots[slot.node.key] !== slot) {
+                                placement.entities.remove(entity)
+                                entity.remove()
+                            } else {
+                                trackEntity(owner, placement, entity, slot, spawned, center, right, unit)
+                            }
+                        } catch (error: RuntimeException) {
+                            logger.log(java.util.logging.Level.WARNING, "Could not place demo display", error)
+                            if (displays.remove(owner, placement)) removePlacement(placement)
+                        }
+                    }
+                }
+                // Removed slots are retired by their owning entity task; pending spawns are fenced above.
+            } catch (error: RuntimeException) {
+                logger.log(java.util.logging.Level.WARNING, "Could not update demo display", error)
+                // Retain the last successful frame on script/layout failure.
+            }
+        }, 1L, 1L)
     }
 
     private fun removePlacement(placement: Placement) {
@@ -158,6 +173,10 @@ class SimpleDisplaysPlugin : JavaPlugin() {
             entity.isDefaultBackground = false
             entity.backgroundColor = Color.fromARGB(0)
             entity.text(node.text)
+            applyTransform(entity, node, unit)
+        }
+
+    private fun applyTransform(entity: TextDisplay, node: TextDraw, unit: Double) {
             val transformation = entity.transformation
             val nativeScale = node.size * unit * 40.0 / 9.0
             require(node.scaleX.isFinite() && node.scaleX > 0 && node.scaleY.isFinite() && node.scaleY > 0) {
@@ -170,21 +189,35 @@ class SimpleDisplaysPlugin : JavaPlugin() {
             entity.transformation = transformation
         }
 
-    private fun trackEntity(placement: Placement, entity: TextDisplay, index: Int, node: TextDraw) {
-        val interval = if (node.animated) 1L else 20L
-        var elapsed = 0L
-        var currentText = node.text
+    private fun nodeLocation(center: Location, right: Vector, node: TextDraw, unit: Double, width: Double, height: Double): Location =
+        center.clone()
+            .add(right.clone().multiply((node.x - width / 2) * unit))
+            .add(0.0, (height / 2 - node.y - node.size) * unit, 0.0)
+            .add(center.direction.multiply(previewDepth(node.zIndex, width, height, unit)))
+
+    private fun trackEntity(
+        owner: UUID, placement: Placement, entity: TextDisplay, slot: PreviewElement, initial: TextDraw,
+        center: Location, right: Vector, unit: Double,
+    ) {
+        var applied = initial
         entity.scheduler.runAtFixedRate(this, { task ->
-            if (!entity.isValid) {
+            if (!entity.isValid || displays[owner] !== placement || placement.slots[applied.key] !== slot) {
                 placement.entities.remove(entity)
+                if (entity.isValid) entity.remove()
                 task.cancel()
-            } else if (node.animated) {
-                val nextText = demo.draw(demoValues, ++elapsed)[index].text
-                if (nextText != currentText) {
-                    entity.text(nextText)
-                    currentText = nextText
+            } else {
+                val next = slot.node
+                if (next != applied) {
+                    if (next.text != applied.text) entity.text(next.text)
+                    if (next.size != applied.size || next.scaleX != applied.scaleX || next.scaleY != applied.scaleY) {
+                        applyTransform(entity, next, unit)
+                    }
+                    if (next.x != applied.x || next.y != applied.y || next.size != applied.size || next.zIndex != applied.zIndex) {
+                        entity.teleportAsync(nodeLocation(center, right, next, unit, demo.width, demo.height))
+                    }
+                    applied = next
                 }
             }
-        }, { placement.entities.remove(entity) }, interval, interval)
+        }, { placement.entities.remove(entity) }, 1L, 1L)
     }
 }

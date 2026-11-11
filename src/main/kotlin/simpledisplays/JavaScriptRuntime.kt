@@ -109,7 +109,10 @@ internal class JavaScriptRuntime(
             // w3c Document is not thread safe even for cloneNode. Copy only under this short lock.
             val root = synchronized(originalRoot) {
                 val detached = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument()
-                (detached.importNode(originalRoot, true) as org.w3c.dom.Element).also { detached.appendChild(it) }
+                (detached.importNode(originalRoot, true) as org.w3c.dom.Element).also {
+                    detached.appendChild(it)
+                    DisplayDocument.copyOrigins(originalRoot, it)
+                }
             }
             val document = DisplayDocument(root)
             var callbackFailure: Throwable? = null

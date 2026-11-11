@@ -39,7 +39,7 @@ class XmlDocumentScriptTest {
             val script = """let n=0; function render(ctx) {
               const title=document.getElementById('title'); title.textContent=ctx.viewerId+':'+(++n)+':'+ctx.viewerData.locale;
               const list=document.getElementById('list'); list.replaceChildren();
-              ctx.data.stops.slice(0,2).forEach((stop,i)=>{const row=document.createElement('span');row.textContent=stop.name;row.setAttribute('style','top: '+(i*20));list.appendChild(row);});
+              ctx.data.stops.slice(0,2).forEach((stop,i)=>{const row=document.createElement('span');row.id='stop:'+stop.name;row.textContent=stop.name;row.setAttribute('style','top: '+(i*20));list.appendChild(row);});
             }"""
             service.compile(xml(script, "<span id='title'/><div id='list'/>")).use { template ->
                 fun draw(id: String) = text(template.draw(DisplayContext(mapOf("stops" to listOf(mapOf("name" to "Central"),mapOf("name" to "Park"))),id,mapOf("locale" to "en"))))
@@ -192,7 +192,7 @@ class XmlDocumentScriptTest {
     }
     @Test fun `parallel viewers own separate documents`() {
         XmlDisplayService().use { service ->
-            val template=service.compile(xml("function render(ctx){const s=document.createElement('span');s.textContent=ctx.viewerId;document.documentElement.replaceChildren(s)}"))
+            val template=service.compile(xml("function render(ctx){const s=document.createElement('span');s.id='title';s.textContent=ctx.viewerId;document.documentElement.replaceChildren(s)}"))
             // Warm the shared engine before asserting ordinary invocation budgets.
             template.draw(DisplayContext(viewerId="warm"))
             val pool=Executors.newFixedThreadPool(4)

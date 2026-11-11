@@ -8,6 +8,37 @@ import java.util.IdentityHashMap
 
 /** Invocation-local visual DOM. Only explicit proxies cross the guest boundary. */
 internal class DisplayDocument(val root: Element) {
+    companion object {
+        private const val ORIGINAL_PATH = "simpledisplays.originalPath"
+
+        fun stampOriginalPaths(root: Element) {
+            fun visit(element: Element, path: String) {
+                element.setUserData(ORIGINAL_PATH, path, null)
+                var index = 0
+                for (i in 0 until element.childNodes.length) {
+                    (element.childNodes.item(i) as? Element)?.let { visit(it, "$path/${index++}") }
+                }
+            }
+            visit(root, "0")
+        }
+
+        /** importNode does not preserve userData; copy private origins with the detached DOM. */
+        fun copyOrigins(original: Element, copy: Element) {
+            original.getUserData(ORIGINAL_PATH)?.let { copy.setUserData(ORIGINAL_PATH, it, null) }
+            for (i in 0 until original.childNodes.length) {
+                val child = original.childNodes.item(i) as? Element ?: continue
+                copyOrigins(child, copy.childNodes.item(i) as Element)
+            }
+        }
+
+        fun drawKey(element: Element): String {
+            if (element.hasAttribute("id")) return "id:" + element.getAttribute("id")
+            val path = element.getUserData(ORIGINAL_PATH) as? String
+            require(path != null) { "Script-created drawable <${element.tagName}> requires an explicit id" }
+            return "path:$path"
+        }
+    }
+
     private val allocated = IdentityHashMap<Element, ElementProxy>()
     private var allocatedNodes = 0
     private var allocatedChars = 0L
@@ -168,7 +199,10 @@ internal class DisplayDocument(val root: Element) {
             val attrs = allowed(element)
             for (i in 0 until element.attributes.length) require(element.attributes.item(i).nodeName in attrs) { "Unsupported element attribute" }
             val id = element.getAttribute("id")
-            require(id.isEmpty() || ids.add(id)) { "Duplicate element ID: $id" }
+            if (element.hasAttribute("id")) {
+                require(id.isNotBlank() && id.length <= 1021) { "Element id must be nonblank and at most 1021 characters" }
+                require(ids.add(id)) { "Duplicate element ID: $id" }
+            }
             if (element.tagName == "span") {
                 outputText += element.textContent.length
                 require(outputText <= 65536) { "Too much output text" }

@@ -1,6 +1,6 @@
 # SimpleDisplays
 
-SimpleDisplays compiles XML into renderer-independent `TextDraw` lists. XML defines the canvas and static layout; inline JavaScript can update a fresh document for each viewer before layout. The Bukkit plugin publishes `DisplayService` through the services registry and includes its own XML demo renderer. The existing demo remains a static XML example; callers of scripted templates own frame refresh and changing visual-node counts.
+SimpleDisplays compiles XML into renderer-independent `TextDraw` lists. XML defines the canvas and static layout; inline JavaScript can update a fresh document for each viewer before layout. The Bukkit plugin publishes `DisplayService` through the services registry and includes its own XML demo renderer. The standalone demo reconciles frames by stable element keys; external hosts own their own frame scheduling and keyed reconciliation.
 
 ## An XML template with JavaScript
 
@@ -15,6 +15,7 @@ SimpleDisplays compiles XML into renderer-independent `TextDraw` lists. XML defi
             list.replaceChildren();
             ctx.data.futureStops.slice(0, 4).forEach((stop, i) => {
                 const row = document.createElement("span");
+                row.id = "stop:" + stop.occurrenceId;
                 row.setAttribute("style", "left:128;top:" + (i * 18) + ";font-size:16");
                 row.textContent = stop.name;
                 list.appendChild(row);
@@ -39,7 +40,7 @@ val service = requireNotNull(server.servicesManager.load(DisplayService::class.j
 val template = service.compile(xml, icons = emptyMap())
 val frame = template.draw(DisplayContext(
     data = mapOf("destination" to "Central",
-                 "futureStops" to listOf(mapOf("name" to "Park"))),
+                 "futureStops" to listOf(mapOf("name" to "Park", "occurrenceId" to "park-1"))),
     viewerId = player.uniqueId.toString(),
     viewerData = mapOf("language" to "en"),
     elapsedTicks = 20L,
@@ -66,6 +67,10 @@ The host may supply `placeholderResolver = PlaceholderResolver { token -> ... }`
 - Element `appendChild(node)`, `remove()`, `replaceChildren(...nodes)`.
 
 The interface supports only the existing XML vocabulary. Scripts cannot create scripts, alter canvas dimensions, attach foreign nodes, form cycles, or leave duplicate IDs. `textContent` assigns literal text, never XML/HTML. There is no `innerHTML`, CSS selector engine, browser events, network API or timer API. Normal JS arrays and local computations remain available.
+
+Every drawable produces a required `TextDraw.key`. Explicit XML/JS IDs produce `id:<id>`; static XML without an ID produces `path:<original document element path>` (root `0`, element children indexed from zero). Original paths are private compiler metadata preserved when scripts move original elements. Runtime-created spans, rectangles and icons require explicit IDs; paths are never inferred from a changing generated list. IDs must be nonblank and at most 1,021 characters, keeping prefixed keys within 1,024 characters. IDs are unique within the attached document. Use semantic stop occurrence IDs rather than names, translated strings or changing list positions. Empty spans still emit a primitive, so blinking can change only its text to an empty string.
+
+All visual elements accept `z-index` in `style`, an integer from 0 through 63. The default is 0; a div supplies an absolute inherited default to descendants, and explicit child values override it. TextDraw exposes this as `zIndex`. Renderers should offset along the screen normal by `zIndex / 63 * min(physicalWidth, physicalHeight) * 0.01`. Depth never depends on element count/order or key hashing. Same-layer overlap is the author’s responsibility. The standalone demo uses the same fixed depth budget and keeps entities for unchanged keys, updating only changed content/geometry.
 
 Layout uses existing `style` declarations: `div` has `left`/`top`; `span` adds `font-size`/`color`; `icon` adds `width`/`height` instead. Spans may use `font` and `bind`; icons use `src` from the compile-time `Map<String, List<IconFrame>>`. A span's `left` is its horizontal center and `top` its top edge. Icon boxes use a top-left origin and fit a square glyph at their center. `rect` uses `left`, `top`, `width`, `height`, `color` (white by default); its origin is its actual ink's top-left and its width/height are positive logical lengths. Each rectangle emits one vanilla U+2588 glyph using explicit `minecraft:include/default`, independently stretched to the requested dimensions. It needs no custom rectangle font or texture. Vanilla 26.1.2 and 26.2 provide an opaque 8×8 bitmap with advance 9 and ascent 7; using the include directly avoids the default font's Force Unicode filtering. Resource packs that override this vanilla include/glyph can change that geometry.
 

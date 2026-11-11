@@ -34,6 +34,7 @@ class XmlRectangleTest {
             val template = service.compile("""<screen width="256" height="128"><script><![CDATA[
                 function render(ctx) {
                     const rect = document.createElement('rect');
+                    rect.id = 'resizing-rectangle';
                     rect.setAttribute('style', 'left:12;top:8;width:' + ctx.data.width + ';height:20;color:#ff0000');
                     document.documentElement.appendChild(rect);
                 }

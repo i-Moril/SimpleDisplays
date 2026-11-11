@@ -28,6 +28,8 @@ internal class XmlDisplayService : DisplayService {
     private fun runtimeCreated() = runtimeDelegate.isInitialized()
 
     private class Node(
+        val key: String,
+        val zIndex: Int,
         val x: Double,
         val y: Double,
         val size: Double,
@@ -36,7 +38,7 @@ internal class XmlDisplayService : DisplayService {
         val scaleY: Double = 1.0,
         val text: (Map<String, String>, Long) -> Component,
     ) {
-        fun draw(values: Map<String, String>, ticks: Long) = TextDraw(x, y, size, text(values, ticks), animated, scaleX, scaleY)
+        fun draw(values: Map<String, String>, ticks: Long) = TextDraw(key, x, y, size, text(values, ticks), animated, scaleX, scaleY, zIndex)
     }
 
     override fun compile(xml: String, icons: Map<String, List<IconFrame>>): DisplayTemplate {
@@ -73,6 +75,7 @@ internal class XmlDisplayService : DisplayService {
             }
         }
         collect(root)
+        DisplayDocument.stampOriginalPaths(root)
         DisplayDocument(root).validate()
         val nodes = compileNodes(root, copiedIcons)
         if (scripts.isNotEmpty()) {
@@ -94,12 +97,16 @@ internal class XmlDisplayService : DisplayService {
     }
 
     private fun compileNodes(root: Element, icons: Map<String, List<IconFrame>>): List<Node> =
-        buildList { readChildren(root, 0.0, 0.0, icons, this) }.also { require(it.size <= 1024) { "Too many output elements" } }
+        buildList { readChildren(root, 0.0, 0.0, 0, icons, this) }.also { nodes ->
+            require(nodes.size <= 1024) { "Too many output elements" }
+            require(nodes.map { it.key }.toSet().size == nodes.size) { "Duplicate draw key" }
+        }
 
     private fun readChildren(
         parent: Element,
         x: Double,
         y: Double,
+        inheritedZIndex: Int,
         icons: Map<String, List<IconFrame>>,
         output: MutableList<Node>,
     ) {
@@ -117,12 +124,15 @@ internal class XmlDisplayService : DisplayService {
                 "rect" -> setOf("left", "top", "width", "height", "color")
                 else -> error("Unsupported element <${element.tagName}>")
             }
-            require(supported.containsAll(style.keys)) { "Unsupported style on <${element.tagName}>" }
+            require((supported + "z-index").containsAll(style.keys)) { "Unsupported style on <${element.tagName}>" }
+            val zIndex = style["z-index"]?.let {
+                requireNotNull(it.toIntOrNull()?.takeIf { layer -> layer in 0..63 }) { "z-index must be an integer in 0..63" }
+            } ?: inheritedZIndex
             val left = x + length(style["left"] ?: "0")
             val top = y + length(style["top"] ?: "0")
             require(left.isFinite() && top.isFinite()) { "Invalid derived coordinates" }
             when (element.tagName) {
-                "div" -> readChildren(element, left, top, icons, output)
+                "div" -> readChildren(element, left, top, zIndex, icons, output)
                 "span" -> {
                     val size = length(style["font-size"] ?: "16", positive = true)
                     val font = Key.key(element.getAttribute("font").ifBlank { "minecraft:default" })
@@ -131,7 +141,7 @@ internal class XmlDisplayService : DisplayService {
                     }
                     val fallback = Component.text(element.textContent.trim()).font(font).color(color)
                     val binding = element.getAttribute("bind").trim()
-                    output += Node(left, top, size) { values, _ ->
+                    output += Node(DisplayDocument.drawKey(element), zIndex, left, top, size) { values, _ ->
                         values[binding]?.takeIf { binding.isNotEmpty() }
                             ?.let { fallback.content(it) } ?: fallback
                     }
@@ -155,7 +165,7 @@ internal class XmlDisplayService : DisplayService {
                     }
                     val text = Component.text("\u2588").font(Key.key("minecraft:include/default")).color(color)
                         .decorations(TextDecoration.entries.associateWith { TextDecoration.State.FALSE })
-                    output += Node(center, top, size, scaleX = scaleX) { _, _ -> text }
+                    output += Node(DisplayDocument.drawKey(element), zIndex, center, top, size, scaleX = scaleX) { _, _ -> text }
                 }
                 "icon" -> {
                     val source = element.getAttribute("src")
@@ -166,7 +176,7 @@ internal class XmlDisplayService : DisplayService {
                     val height = length(style["height"] ?: "16", positive = true)
                     val size = minOf(width, height)
                     require((left + width / 2).isFinite() && (top + (height - size) / 2).isFinite()) { "Invalid icon geometry" }
-                    output += Node(left + width / 2, top + (height - size) / 2, size, frames.size > 1) { _, ticks ->
+                    output += Node(DisplayDocument.drawKey(element), zIndex, left + width / 2, top + (height - size) / 2, size, frames.size > 1) { _, ticks ->
                         var offset = Math.floorMod(ticks, cycleTicks)
                         frames.first { frame ->
                             offset -= frame.ticks
